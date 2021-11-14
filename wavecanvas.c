@@ -1,4 +1,4 @@
-// wavecanvas: a disturbingly symple synthesizer
+// wavecanvas: a disturbingly simple synthesizer
 //
 // Due to lack of expertise with common synthesizer language, I use a
 // painting-based language.
@@ -35,10 +35,25 @@ struct wave_brush {      // data structure to hold the timbre of an instrument
 	float a[0x100];  // relative amplitude of the partials
 	float λ;         // exponential decay rate (in hertz)
 	                 // note: for more realistic timbres, each partial
-	                 // should have a different decay rate
+	                 // should have a different decay rate, etc
 };
 
-// this is the only function that paints a brush stroke on the canvas
+struct wave_orchestra { // a set of instruments (brushes)
+	int n;          // number of instruments
+	struct wave_brush t[0x100];
+};
+
+#define MAX_NOTES 40000
+struct wave_score {          // a set of notes
+	int n;               // total number of notes
+	float f[MAX_NOTES];  // pitch (fundamental frequency)
+	float t[MAX_NOTES];  // start of attack (time)
+	float l[MAX_NOTES];  // length
+	int   i[MAX_NOTES];  // instrument
+};
+
+
+// this is the sole function that paints a brush stroke on the canvas
 static void wave_play(                  // "play" note f between T[0] and T[1]
 		struct wave_canvas *w,  // sound canvas
 		struct wave_brush *b,   // instrument
@@ -48,7 +63,8 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 {
 	assert(1 == b->f[0]);
 	int n[2] = { T[0] * w->F, T[1] * w->F }; // discrete time interval
-	fprintf(stderr, "note %g from %g to %g (%d harmonics)\n", f, T[0], T[1], b->n);
+	fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
+			f, T[0], T[1], b->n);
 	for (int i = 0; i < n[1] - n[0]; i++)
 	{
 		int j = i + n[0]; // index in the w->n table
@@ -60,7 +76,7 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		for (int k = 0; k < b->n; k++)
 			if (f * b->f[k] * 2 < w->F) // avoid aliasing
 				x += b->a[k] * sin(f * b->f[k] * 2*π*t);
-		w->x[j] = exp(- b->λ * f * t) * x;
+		w->x[j] += exp(- b->λ * f * t) * x;
 	}
 }
 
@@ -130,14 +146,14 @@ int main()
 
 	struct wave_brush b[1];
 	wave_brush_init_triangular(b);
-	b->λ = 0.002;
+	b->λ = 0.004;
 
 	for (int i = 0; i <= 12; i++)
 		wave_play(w, b, 440*pow(2,i/12.0), (float[]){i/2.0, (i+1)/2.0});
-	//wave_play(w, b, 1*440, (float[]){0, 1});
-	//wave_play(w, b, 2*440, (float[]){1, 2});
-	//wave_play(w, b, 3*440, (float[]){2, 3});
-	//wave_play(w, b, 4*440, (float[]){3, 4});
+	wave_play(w, b, 1*440, (float[]){0, 1});
+	wave_play(w, b, 2*440, (float[]){1, 2});
+	wave_play(w, b, 3*440, (float[]){2, 3});
+	wave_play(w, b, 4*440, (float[]){3, 4});
 
 	wave_quantized_stdout(w);
 	return 0;
