@@ -11,13 +11,20 @@
 // brushes (instruments) and the texture (timbre) is different.
 // There is no notion of "time", the whole sound file is seen at once and the
 // note can be played at any time, not necessarily in order.
+//
+// to find better "painting" names
+// 	orchestra    <-> palette/brush set?
+// 	score        <-> drawing instructions?
+//
+//   Play a score using an orchestra :: draw a painting using these brushes
 
 
 #include <assert.h>
 #include <math.h>     // sin, exp, fabs, fmax
 #include <stdlib.h>   // malloc, free
 #include <stdint.h>   // uint8_t uint16_t
-#include <stdio.h>    // fwrite, stdout
+#include <stdio.h>    // fwrite, stdout (plus fprintf, stderr for debugging)
+#include <ctype.h>    // isalpha, tolower
 
 
 static const float π = M_PI;
@@ -44,13 +51,177 @@ struct wave_orchestra { // a set of instruments (brushes)
 };
 
 #define MAX_NOTES 40000
-struct wave_score {          // a set of notes
+struct wave_score {          // a set of notes (in no particular order)
 	int n;               // total number of notes
 	float f[MAX_NOTES];  // pitch (fundamental frequency)
 	float t[MAX_NOTES];  // start of attack (time)
 	float l[MAX_NOTES];  // length
-	int   i[MAX_NOTES];  // instrument
+	int   i[MAX_NOTES];  // instrument (index on the orchestra)
 };
+
+//struct wave_temperament { // gives the fundamental pitch of each note
+//
+//};
+
+// BASIC SCALE
+// C is middle C
+// A is about 440
+// C, D, E, F, G, A, B, C D E F G A B c d e f g a b c' d' e' f' g' a' b'
+// (can add more modifiers)
+// accidentals (to be notated explicitly at each note):
+// _B : B flat
+// ^F : F sharp
+
+static void parse_note_name(
+		int *o,        // output octave (0 is that of middle C)
+		int *n,        // output note from 0=C to 6=B
+		int *d,        // output accidental deviation
+		float *t,        // output note length
+		char *a        // input note string
+		)
+{
+	fprintf(stderr, "parsing note string \"%s\"...", a);
+	*o = *n = *d = 0;
+	*t = 1;
+	int i = 0;
+
+	// prefix: accidentals
+	while (a[i] && !isalpha(a[i]))
+	{
+		if (a[i] == '^') *d += 1;
+		if (a[i] == '_') *d -= 1;
+		i += 1;
+	}
+
+	// the actual note
+	switch(tolower(a[i])) {
+	case 'c': *n = 0; break;
+	case 'd': *n = 1; break;
+	case 'e': *n = 2; break;
+	case 'f': *n = 3; break;
+	case 'g': *n = 4; break;
+	case 'a': *n = 5; break;
+	case 'b': *n = 6; break;
+	case 'z': *n = -1; break;
+	default: fprintf(stderr, "ERROR: unrecognized note %c\n", a[i]);
+	}
+	if (islower(a[i])) *o += 1;
+	i += 1;
+
+	// first suffix: octave modifier
+	while (a[i] && (a[i]=='\'' || a[i]==','))
+	{
+		if (a[i] == '\'') *o += 1;
+		if (a[i] == ',' ) *o -= 1;
+		i += 1;
+	}
+
+	// second suffix: note duration
+	float p = 0; // number before the slash
+	float q = 0; // number after the slash
+	while (a[i] && isdigit(a[i]))
+	{
+		p = 10*p + a[i]-'0';
+		i += 1;
+	}
+	if (a[i] == '/')
+	{
+		i += 1;
+		while (a[i] && isdigit(a[i]))
+		{
+			q = 10*q + a[i]-'0';
+			i += 1;
+		}
+	}
+	if (!p) p = 1;
+	if (!q) q = 1;
+	*t = p/q;
+
+	// debug
+	fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
+}
+
+static int test_parse_note_name(void)
+{
+	int o, n, d;
+	float t;
+	parse_note_name(&o, &n, &d, &t, "a");
+	parse_note_name(&o, &n, &d, &t, "A");
+	parse_note_name(&o, &n, &d, &t, "^A");
+	parse_note_name(&o, &n, &d, &t, "A,");
+	parse_note_name(&o, &n, &d, &t, "a'");
+	parse_note_name(&o, &n, &d, &t, "a'3");
+	parse_note_name(&o, &n, &d, &t, "a'3/2");
+	parse_note_name(&o, &n, &d, &t, "a'355/113");
+	parse_note_name(&o, &n, &d, &t, "a'/4");
+	parse_note_name(&o, &n, &d, &t, "z4");
+}
+
+
+
+static int chromatic_note(  // compute a chromatic note from major+accidentals
+	int n,              // input note in major scale
+	int d               // input accidental deviation
+	)
+{
+	if (n < 0) return -1;
+	assert(n >= 0 && n < 7);
+	int m[7] = {0, 2, 4, 5, 7, 9, 11};
+	return m[n] + d;
+}
+
+static float equal_temperament_pitch_from_note_name(char *a)
+{
+	int o; // octave (0=octave that contains middle C)
+	int n; // note within the octave (from 0=c to 6=b)
+	int d; // accidental increment
+	float t; // note length
+	parse_note_name(&o, &n, &d, &t, a);
+	int x = chromatic_note(n, d) + 12*o + 9;
+	return d >= 0 ? 440 * pow(2, x/12) : 0;
+}
+
+static void get_pitch_and_duration(float *f, float *t, char *a)
+{
+	int o; // octave (0=octave that contains middle C)
+	int n; // note within the octave (from 0=c to 6=b)
+	int d; // accidental increment
+	//float t; // note length
+	parse_note_name(&o, &n, &d, t, a);
+	float x = chromatic_note(n, d) + 12*o - 9;
+	*f = d >= 0 ? 440 * pow(2, x/12) : 0;
+	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+}
+
+static int test_get_pitch_and_duration(void)
+{
+	float f, t;
+	get_pitch_and_duration(&f, &t, "A,,");
+	get_pitch_and_duration(&f, &t, "A,");
+	get_pitch_and_duration(&f, &t, "A");
+	get_pitch_and_duration(&f, &t, "a");
+	get_pitch_and_duration(&f, &t, "a'");
+	get_pitch_and_duration(&f, &t, "^A");
+	get_pitch_and_duration(&f, &t, "a'3");
+	get_pitch_and_duration(&f, &t, "a'3/2");
+	get_pitch_and_duration(&f, &t, "a'355/113");
+	get_pitch_and_duration(&f, &t, "a'/4");
+	get_pitch_and_duration(&f, &t, "z4");
+	get_pitch_and_duration(&f, &t, "C,,");
+	get_pitch_and_duration(&f, &t, "C,");
+	get_pitch_and_duration(&f, &t, "C");
+	get_pitch_and_duration(&f, &t, "c");
+	get_pitch_and_duration(&f, &t, "c'");
+}
+
+static void fill_score_from_abc(//_and_temperament(
+		struct wave_score *s,
+		char *a//,
+		)
+		//struct *wave_temperament *t)
+{
+	s->n = 1;
+}
 
 
 // this is the sole function that paints a brush stroke on the canvas
@@ -139,7 +310,15 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 	free(x);
 }
 
+//static void wave_bwc
+
 int main()
+{
+	//test_parse_note_name();
+	test_get_pitch_and_duration();
+	return 0;
+}
+int main_no()
 {
 	struct wave_canvas w[1];
 	wave_canvas_init(w, 7, 40000);
