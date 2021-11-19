@@ -298,6 +298,28 @@ static void wave_brush_init_triangular(struct wave_brush *b)
 	b->λ = 0;
 }
 
+// smoother, softer-sounding wave
+static void wave_brush_init_smoother(struct wave_brush *b)
+{
+	b->n = 0x100;
+	for (int i = 0; i < b->n; i++)
+	{
+		b->f[i] = i + 1;      // harmonic spectrum
+		b->a[i] = 1/pow(b->f[i],2);  // inverse square frequency decay
+	}
+	b->λ = 0;
+}
+static void wave_brush_init_smoother3(struct wave_brush *b)
+{
+	b->n = 0x100;
+	for (int i = 0; i < b->n; i++)
+	{
+		b->f[i] = i + 1;      // harmonic spectrum
+		b->a[i] = 1/pow(b->f[i],2.1);  // inverse square frequency decay
+	}
+	b->λ = 0;
+}
+
 static void wave_quantized_stdout(struct wave_canvas *w)
 {
 	float M = 0;
@@ -312,20 +334,24 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 
 //static void wave_bwc
 
-int main()
+int main_no()
 {
 	//test_parse_note_name();
 	test_get_pitch_and_duration();
 	return 0;
 }
-int main_no()
+int main_yes()
 {
 	struct wave_canvas w[1];
 	wave_canvas_init(w, 7, 40000);
 
 	struct wave_brush b[1];
-	wave_brush_init_triangular(b);
-	b->λ = 0.004;
+	wave_brush_init_smoother(b);
+	//wave_brush_init_smoother3(b);
+	//wave_brush_init_triangular(b);
+	//wave_brush_init_full(b);
+	//wave_brush_init_pure(b);
+	b->λ = 0.002;
 
 	for (int i = 0; i <= 12; i++)
 		wave_play(w, b, 440*pow(2,i/12.0), (float[]){i/2.0, (i+1)/2.0});
@@ -337,3 +363,4 @@ int main_no()
 	wave_quantized_stdout(w);
 	return 0;
 }
+int main(){return main_yes();}
