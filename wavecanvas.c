@@ -72,7 +72,7 @@ struct wave_score {          // a set of notes (in no particular order)
 // _B : B flat
 // ^F : F sharp
 
-static void parse_note_name(
+static int parse_note_name(
 		int *o,        // output octave (0 is that of middle C)
 		int *n,        // output note from 0=C to 6=B
 		int *d,        // output accidental deviation
@@ -139,6 +139,7 @@ static void parse_note_name(
 
 	// debug
 	fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
+	return i;
 }
 
 static int test_parse_note_name(void)
@@ -170,48 +171,62 @@ static int chromatic_note(  // compute a chromatic note from major+accidentals
 	return m[n] + d;
 }
 
-static float equal_temperament_pitch_from_note_name(char *a)
-{
-	int o; // octave (0=octave that contains middle C)
-	int n; // note within the octave (from 0=c to 6=b)
-	int d; // accidental increment
-	float t; // note length
-	parse_note_name(&o, &n, &d, &t, a);
-	int x = chromatic_note(n, d) + 12*o + 9;
-	return d >= 0 ? 440 * pow(2, x/12) : 0;
-}
+//static float equal_temperament_pitch_from_note_name(char *a)
+//{
+//	int o; // octave (0=octave that contains middle C)
+//	int n; // note within the octave (from 0=c to 6=b)
+//	int d; // accidental increment
+//	float t; // note length
+//	parse_note_name(&o, &n, &d, &t, a);
+//	int x = chromatic_note(n, d) + 12*o + 9;
+//	return d >= 0 ? 440 * pow(2, x/12) : 0;
+//}
 
-static void get_pitch_and_duration(float *f, float *t, char *a)
+//static void get_pitch_and_duration(float *f, float *t, char *a)
+//{
+//	int o; // octave (0=octave that contains middle C)
+//	int n; // note within the octave (from 0=c to 6=b)
+//	int d; // accidental increment
+//	//float t; // note length
+//	parse_note_name(&o, &n, &d, t, a);
+//	float x = chromatic_note(n, d) + 12*o - 9;
+//	*f = d >= 0 ? 440 * pow(2, x/12) : 0;
+//	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+//}
+
+// return a pointer to the remaningn part of the string
+static char *parse_pitch_and_duration(float *f, float *t, char *a)
 {
 	int o; // octave (0=octave that contains middle C)
 	int n; // note within the octave (from 0=c to 6=b)
 	int d; // accidental increment
 	//float t; // note length
-	parse_note_name(&o, &n, &d, t, a);
+	int i = parse_note_name(&o, &n, &d, t, a);
 	float x = chromatic_note(n, d) + 12*o - 9;
 	*f = d >= 0 ? 440 * pow(2, x/12) : 0;
-	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+	//fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+	return a + i;
 }
 
 static int test_get_pitch_and_duration(void)
 {
 	float f, t;
-	get_pitch_and_duration(&f, &t, "A,,");
-	get_pitch_and_duration(&f, &t, "A,");
-	get_pitch_and_duration(&f, &t, "A");
-	get_pitch_and_duration(&f, &t, "a");
-	get_pitch_and_duration(&f, &t, "a'");
-	get_pitch_and_duration(&f, &t, "^A");
-	get_pitch_and_duration(&f, &t, "a'3");
-	get_pitch_and_duration(&f, &t, "a'3/2");
-	get_pitch_and_duration(&f, &t, "a'355/113");
-	get_pitch_and_duration(&f, &t, "a'/4");
-	get_pitch_and_duration(&f, &t, "z4");
-	get_pitch_and_duration(&f, &t, "C,,");
-	get_pitch_and_duration(&f, &t, "C,");
-	get_pitch_and_duration(&f, &t, "C");
-	get_pitch_and_duration(&f, &t, "c");
-	get_pitch_and_duration(&f, &t, "c'");
+	parse_pitch_and_duration(&f, &t, "A,,");
+	parse_pitch_and_duration(&f, &t, "A,");
+	parse_pitch_and_duration(&f, &t, "A");
+	parse_pitch_and_duration(&f, &t, "a");
+	parse_pitch_and_duration(&f, &t, "a'");
+	parse_pitch_and_duration(&f, &t, "^A");
+	parse_pitch_and_duration(&f, &t, "a'3");
+	parse_pitch_and_duration(&f, &t, "a'3/2");
+	parse_pitch_and_duration(&f, &t, "a'355/113");
+	parse_pitch_and_duration(&f, &t, "a'/4");
+	parse_pitch_and_duration(&f, &t, "z4");
+	parse_pitch_and_duration(&f, &t, "C,,");
+	parse_pitch_and_duration(&f, &t, "C,");
+	parse_pitch_and_duration(&f, &t, "C");
+	parse_pitch_and_duration(&f, &t, "c");
+	parse_pitch_and_duration(&f, &t, "c'");
 }
 
 static void fill_score_from_abc(//_and_temperament(
@@ -302,6 +317,7 @@ static void wave_brush_init_triangular(struct wave_brush *b)
 static void wave_brush_init_smoother(struct wave_brush *b)
 {
 	b->n = 0x100;
+	//b->n = 4;
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = i + 1;      // harmonic spectrum
@@ -351,7 +367,7 @@ int main_yes()
 	//wave_brush_init_triangular(b);
 	//wave_brush_init_full(b);
 	//wave_brush_init_pure(b);
-	b->λ = 0.002;
+	b->λ = 0.001;
 
 	for (int i = 0; i <= 12; i++)
 		wave_play(w, b, 440*pow(2,i/12.0), (float[]){i/2.0, (i+1)/2.0});
