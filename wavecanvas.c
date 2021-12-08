@@ -229,6 +229,11 @@ static int test_get_pitch_and_duration(void)
 	parse_pitch_and_duration(&f, &t, "c'");
 }
 
+static void test_parser(void)
+{
+	char *s = "";
+}
+
 static void fill_score_from_abc(//_and_temperament(
 		struct wave_score *s,
 		char *a//,
@@ -244,13 +249,13 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		struct wave_canvas *w,  // sound canvas
 		struct wave_brush *b,   // instrument
 		float f,                // fundamental frequency (note)
-		float T[2]              // time interval
+		float Ta, float Tb      // time interval
 		)
 {
 	assert(1 == b->f[0]);
-	int n[2] = { T[0] * w->F, T[1] * w->F }; // discrete time interval
+	int n[2] = { Ta * w->F, Tb * w->F }; // discrete time interval
 	fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
-			f, T[0], T[1], b->n);
+			f, Ta, Tb, b->n);
 	for (int i = 0; i < n[1] - n[0]; i++)
 	{
 		int j = i + n[0]; // index in the w->n table
@@ -356,10 +361,16 @@ int main_no()
 	test_get_pitch_and_duration();
 	return 0;
 }
+int main_no2()
+{
+	//test_parse_note_name();
+	test_parser();
+	return 0;
+}
 int main_yes()
 {
 	struct wave_canvas w[1];
-	wave_canvas_init(w, 7, 40000);
+	wave_canvas_init(w, 7, 44000);
 
 	struct wave_brush b[1];
 	wave_brush_init_smoother(b);
@@ -370,11 +381,11 @@ int main_yes()
 	b->λ = 0.001;
 
 	for (int i = 0; i <= 12; i++)
-		wave_play(w, b, 440*pow(2,i/12.0), (float[]){i/2.0, (i+1)/2.0});
-	wave_play(w, b, 1*440, (float[]){0, 1});
-	wave_play(w, b, 2*440, (float[]){1, 2});
-	wave_play(w, b, 3*440, (float[]){2, 3});
-	wave_play(w, b, 4*440, (float[]){3, 4});
+		wave_play(w, b, 440*pow(2,i/12.0), i/2.0, (i+1)/2.0);
+	wave_play(w, b, 1*440, 0, 1);
+	wave_play(w, b, 2*440, 1, 2);
+	wave_play(w, b, 3*440, 2, 3);
+	wave_play(w, b, 4*440, 3, 4);
 
 	wave_quantized_stdout(w);
 	return 0;
