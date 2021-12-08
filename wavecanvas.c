@@ -194,7 +194,7 @@ static int chromatic_note(  // compute a chromatic note from major+accidentals
 //	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
 //}
 
-// return a pointer to the remaningn part of the string
+// return a pointer to the remaning part of the string
 static char *parse_pitch_and_duration(float *f, float *t, char *a)
 {
 	int o; // octave (0=octave that contains middle C)
@@ -203,7 +203,7 @@ static char *parse_pitch_and_duration(float *f, float *t, char *a)
 	//float t; // note length
 	int i = parse_note_name(&o, &n, &d, t, a);
 	float x = chromatic_note(n, d) + 12*o - 9;
-	*f = d >= 0 ? 440 * pow(2, x/12) : 0;
+	*f = n >= 0 ? 440 * pow(2, x/12) : 0;
 	//fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
 	return a + i;
 }
@@ -231,7 +231,14 @@ static int test_get_pitch_and_duration(void)
 
 static void test_parser(void)
 {
-	char *s = "";
+	char s[] = "zCDE FDEC G2c2B2C2";
+	char *t = s;
+	while (*t)
+	{
+		float f, l;
+		t = parse_pitch_and_duration(&f, &l, t);
+		fprintf(stderr, "f=%g l=%g\n", f, l);
+	}
 }
 
 static void fill_score_from_abc(//_and_temperament(
@@ -390,4 +397,4 @@ int main_yes()
 	wave_quantized_stdout(w);
 	return 0;
 }
-int main(){return main_yes();}
+int main(){return main_no2();}
