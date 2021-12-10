@@ -241,13 +241,26 @@ static void test_parser(void)
 	}
 }
 
-static void fill_score_from_abc(//_and_temperament(
-		struct wave_score *s,
-		char *a//,
+static void add_abc_chunk_into_score(
+		struct wave_score *s, // output score
+		char *a,              // input ABC string
+		float b;              // input beats per minute of a unit note
+		float t;              // time offset at the beginning
 		)
-		//struct *wave_temperament *t)
 {
-	s->n = 1;
+	s->n = 0; // TODO: remove this line
+	while (*a)
+	{
+		float ω; // note pitch
+		float λ; // note length (in "abc" units)
+		a = parse_pitch_and_duration(&ω, &λ, a);
+		s->f[s->n] = ω;    // pitch
+		s->t[s->n] = t;    // attack time
+		s->l[s->n] = λ/b;  // duration
+		s->i[s->n] = 1;    // instrument
+		t += t + λ/b;
+		s->n += 1;
+	}
 }
 
 
@@ -360,6 +373,14 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 	free(x);
 }
 
+static void test_pipeline(void)
+{
+	char a[] = "zCDE FDEC G2c2B2C2";  // the ABC string
+	struct wave_score s[1];           // the wave score
+	add_abc_chunk_into_score(s, a, 60, 0);
+}
+
+
 //static void wave_bwc
 
 int main_no()
@@ -370,8 +391,12 @@ int main_no()
 }
 int main_no2()
 {
-	//test_parse_note_name();
 	test_parser();
+	return 0;
+}
+int main_no3()
+{
+	test_pipeline();
 	return 0;
 }
 int main_yes()
@@ -397,4 +422,4 @@ int main_yes()
 	wave_quantized_stdout(w);
 	return 0;
 }
-int main(){return main_no2();}
+int main(){return main_no3();}
