@@ -59,6 +59,14 @@ struct wave_score {          // a set of notes (in no particular order)
 	int   i[MAX_NOTES];  // instrument (index on the orchestra)
 };
 
+static void debug_score(struct wave_score *s)
+{
+	fprintf(stderr, "score with %d notes\n", s->n);
+	for (int i = 0; i < s->n; i++)
+		fprintf(stderr, "\tf=%g t=%g l=%g i=%d\n",
+				s->f[i], s->t[i], s->l[i], s->i[i]);
+}
+
 //struct wave_temperament { // gives the fundamental pitch of each note
 //
 //};
@@ -244,10 +252,11 @@ static void test_parser(void)
 static void add_abc_chunk_into_score(
 		struct wave_score *s, // output score
 		char *a,              // input ABC string
-		float b;              // input beats per minute of a unit note
-		float t;              // time offset at the beginning
+		float b,              // input beats per minute of a unit note
+		float t               // time offset at the beginning
 		)
 {
+	b /= 60;
 	s->n = 0; // TODO: remove this line
 	while (*a)
 	{
@@ -257,8 +266,8 @@ static void add_abc_chunk_into_score(
 		s->f[s->n] = ω;    // pitch
 		s->t[s->n] = t;    // attack time
 		s->l[s->n] = λ/b;  // duration
-		s->i[s->n] = 1;    // instrument
-		t += t + λ/b;
+		s->i[s->n] = 0;    // instrument
+		t += λ/b;
 		s->n += 1;
 	}
 }
@@ -288,6 +297,22 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 			if (f * b->f[k] * 2 < w->F) // avoid aliasing
 				x += b->a[k] * sin(f * b->f[k] * 2*π*t);
 		w->x[j] += exp(- b->λ * f * t) * x;
+	}
+}
+
+static void wave_play_score_using_orchestra(
+		struct wave_canvas *c,    // canvas to fill
+		struct wave_score *s,     // list of notes to play
+		struct wave_orchestra *o  // instruments to play the notes with
+		)
+{
+	for (int i = 0; i < s->n; i++)
+	{
+		struct wave_brush *b = o->t + s->i[i];
+		float f = s->f[i];
+		float t = s->t[i];
+		float T = s->l[i] + t;
+		wave_play(c, b, f, t, T);
 	}
 }
 
@@ -355,10 +380,11 @@ static void wave_brush_init_smoother3(struct wave_brush *b)
 	b->n = 0x100;
 	for (int i = 0; i < b->n; i++)
 	{
-		b->f[i] = i + 1;      // harmonic spectrum
+		b->f[i] = (i + 1);
+		//if (i>0) b->f[i] -= 0.05;
 		b->a[i] = 1/pow(b->f[i],2.1);  // inverse square frequency decay
 	}
-	b->λ = 0;
+	b->λ = 0.01;
 }
 
 static void wave_quantized_stdout(struct wave_canvas *w)
@@ -375,9 +401,22 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 
 static void test_pipeline(void)
 {
-	char a[] = "zCDE FDEC G2c2B2C2";  // the ABC string
+	char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
 	struct wave_score s[1];           // the wave score
-	add_abc_chunk_into_score(s, a, 60, 0);
+	add_abc_chunk_into_score(s, a, 80*4, 0);
+	debug_score(s);
+
+	struct wave_canvas w[1];
+	wave_canvas_init(w, 7, 44000);
+
+	// setup an "orchestra" with one instrument
+	struct wave_orchestra o[1];
+	o->n = 1;
+	wave_brush_init_smoother3(o->t + 0);
+
+	wave_play_score_using_orchestra(w, s, o);
+
+	wave_quantized_stdout(w);
 }
 
 
