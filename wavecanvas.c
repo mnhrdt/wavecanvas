@@ -88,7 +88,7 @@ static int parse_note_name(
 		char *a        // input note string
 		)
 {
-	fprintf(stderr, "parsing note string \"%s\"...", a);
+	//fprintf(stderr, "parsing note string \"%s\"...", a);
 	*o = *n = *d = 0;
 	*t = 1;
 	int i = 0;
@@ -249,15 +249,15 @@ static void test_parser(void)
 	}
 }
 
-static void add_abc_chunk_into_score(
+static float add_abc_chunk_into_score(
 		struct wave_score *s, // output score
 		char *a,              // input ABC string
 		float b,              // input beats per minute of a unit note
 		float t               // time offset at the beginning
-		)
+		) // return value = end of timespan
 {
 	b /= 60;
-	s->n = 0; // TODO: remove this line
+	//s->n = 0; // TODO: remove this line
 	while (*a)
 	{
 		float ω; // note pitch
@@ -270,6 +270,7 @@ static void add_abc_chunk_into_score(
 		t += λ/b;
 		s->n += 1;
 	}
+	return t;
 }
 
 
@@ -283,19 +284,22 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 {
 	assert(1 == b->f[0]);
 	int n[2] = { Ta * w->F, Tb * w->F }; // discrete time interval
-	fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
-			f, Ta, Tb, b->n);
+	//fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
+	//		f, Ta, Tb, b->n);
+	float φ = 55; // least note
+	float A = (220-φ)/(f-φ); // volume equalizer
 	for (int i = 0; i < n[1] - n[0]; i++)
 	{
 		int j = i + n[0]; // index in the w->n table
-		if (j < 0 || j >= w->n) continue; // avoid outside of canvas
+		if (j < 0 || j >= w->n)
+		{fprintf(stderr,"ξ");continue;} // avoid outside of canvas
 
 		float t = i / w->F;  // time since the start of the note
 
 		float x = 0;        // accumulator for the j-th sample
 		for (int k = 0; k < b->n; k++)
 			if (f * b->f[k] * 2 < w->F) // avoid aliasing
-				x += b->a[k] * sin(f * b->f[k] * 2*π*t);
+				x += A * b->a[k] * sin(f * b->f[k] * 2*π*t);
 		w->x[j] += exp(- b->λ * f * t) * x;
 	}
 }
@@ -375,16 +379,18 @@ static void wave_brush_init_smoother(struct wave_brush *b)
 	}
 	b->λ = 0;
 }
+
 static void wave_brush_init_smoother3(struct wave_brush *b)
 {
-	b->n = 0x100;
+	float T[] = {1, .5, .45, 0.25, 0.15, 0.1, 0.05};
+	b->n = sizeof T / sizeof *T;
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = (i + 1);
-		//if (i>0) b->f[i] -= 0.05;
-		b->a[i] = 1/pow(b->f[i],2.1);  // inverse square frequency decay
+		//if (i>0) b->f[i] -= 0.06;
+		b->a[i] = T[i];//1/pow(b->f[i],2.1);  // inverse square frequency decay
 	}
-	b->λ = 0.01;
+	b->λ = 0.009;
 }
 
 static void wave_quantized_stdout(struct wave_canvas *w)
@@ -399,15 +405,49 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 	free(x);
 }
 
+// inventio 1, unit=quarternote, no trills, separate voices (v1 & v2)
+static char *bwv_772_stimme1 =
+	"zCDE FDEC G2c2B2c2       dGAB cABG d2g2f2g2"
+	"eagf egfa gfed cedf      edcB AcBd cBAG ^FAGB"
+	"A2D2 c3d BAG^F EG^FA     GBAc Bdce dB/2c/2dg B2AG"
+	"G2zz zzzz zGAB cABG      ^F2zz zzzz zABc dBcA"
+	"B2zz zzzz zdcB AcBd      c2zz zzzz zedc Bd^ce"
+
+	"d2^c2d2e2 f2A2B2c2       d2^F2^G2A2 B2c2 d5"
+	" E^F^G A^F^GE edce dcBd  ca^gb aefd ^Gfed c2BA"
+	"Aagf egfa g9              efg afge f9"
+	" gfe dfeg f9              def gefd e9"
+	" cde fdec defg afge      fgab c'abg c'2g2 e2dc"
+	"c_BAG FEG_B ABCE DcFB    c16"
+	;
+static char *bwv_772_stimme2 =
+	"zzzz zzzz zC,D,E, F,D,E,C,            G,2G,,2 zzzz zG,A,B, CA,B,G,"
+	"C2B,2C2D2 E2G,2A,2B,2                 C2E,2^F,2G,2 A,2B,2 C5"
+	" D,E,^F, G,E,^F,D, G,2B,,2C,2D,2      E,2^F,2G,2E,2 B,,3C, D,2D,,2"
+	"zG,,A,,B,, C,A,,B,,G,, D,2G,2^F,2G,2  A,D,E,^F, G,E,^F,D, A,2D2C2D2"
+	"G,GFE DFEG F2E2F2D2                   EAGF EGFA G2F2G2E2"
+
+	"F_BAG FAG_B AGFE DFEG                 FEDC B,DCE DCB,A, ^G,B,A,C"
+	"B,2E,2 D3E CB,A,G, ^F,A,^G,B,         A,CB,D CEDF E2A,2E2E,2"
+	"A,2A,,2 zzzz zEDC B,D^CE              D9 A,B,C DB,CA,"
+	"B,9 DCB, A,CB,D                       C9 G,A,_B, CA,B,G,"
+//	"
+	;
+
 static void test_pipeline(void)
 {
-	char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
+	//char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
+	char *a = bwv_772_stimme1;
+	char *b = bwv_772_stimme2;
 	struct wave_score s[1];           // the wave score
-	add_abc_chunk_into_score(s, a, 80*4, 0);
-	debug_score(s);
+	s->n = 0;
+	float ta = add_abc_chunk_into_score(s, a, 80*4, 0);
+	float tb = add_abc_chunk_into_score(s, b, 80*4, 0);
+	fprintf(stderr, "ta=%g tb=%g\n", ta, tb);
+	//debug_score(s);
 
 	struct wave_canvas w[1];
-	wave_canvas_init(w, 7, 44000);
+	wave_canvas_init(w, 66, 44000);
 
 	// setup an "orchestra" with one instrument
 	struct wave_orchestra o[1];
