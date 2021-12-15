@@ -212,7 +212,7 @@ static char *parse_pitch_and_duration(float *f, float *t, char *a)
 	int i = parse_note_name(&o, &n, &d, t, a);
 	float x = chromatic_note(n, d) + 12*o - 9;
 	*f = n >= 0 ? 440 * pow(2, x/12) : 0;
-	//fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
 	return a + i;
 }
 
@@ -257,20 +257,35 @@ static float add_abc_chunk_into_score(
 		) // return value = end of timespan
 {
 	b /= 60;
-	//s->n = 0; // TODO: remove this line
+	int c = 0; // chord state
 	while (*a)
 	{
 		float ω; // note pitch
 		float λ; // note length (in "abc" units)
+		if (isspace(*a)) { a += 1; continue; }   // eat spaces
+		if (*a == '[') { c = 1; a += 1; }        // begin chord
 		a = parse_pitch_and_duration(&ω, &λ, a);
 		s->f[s->n] = ω;    // pitch
 		s->t[s->n] = t;    // attack time
 		s->l[s->n] = λ/b;  // duration
 		s->i[s->n] = 0;    // instrument
-		t += λ/b;
+		if (!c) t += λ/b;  // advance counter if outside chord
+		if (*a == ']') { c = 0; a += 1; }       // end chord
 		s->n += 1;
 	}
 	return t;
+}
+
+static float decay_exp(float λ, float t)
+{
+	return exp(-λ * t);
+}
+
+static float decay_planck(float λ, float t)
+{
+	λ *= 0.01;
+	t *= 0.001;
+	return (t*t*t/(exp(t/λ)-1));
 }
 
 
@@ -298,9 +313,17 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 
 		float x = 0;        // accumulator for the j-th sample
 		for (int k = 0; k < b->n; k++)
+		{
+			// random phase
+			float ξ = k*1.273+0.3*b->n - f * (1+Ta) / (1+k+Tb*Tb);
+
 			if (f * b->f[k] * 2 < w->F) // avoid aliasing
-				x += A * b->a[k] * sin(f * b->f[k] * 2*π*t);
-		w->x[j] += exp(- b->λ * f * t) * x;
+				x += A * b->a[k] * sin(f * b->f[k] * 2*π*t + ξ);
+		}
+		//w->x[j] += exp(- b->λ * f * t) * x;
+		//w->x[j] += x * decay_exp(b->λ * f, t);
+		w->x[j] += x * decay_exp(b->λ*100, t);
+		//w->x[j] += x * decay_planck(b->λ, t);
 	}
 }
 
@@ -377,7 +400,7 @@ static void wave_brush_init_smoother(struct wave_brush *b)
 		b->f[i] = i + 1;      // harmonic spectrum
 		b->a[i] = 1/pow(b->f[i],2);  // inverse square frequency decay
 	}
-	b->λ = 0;
+	b->λ = 0.001;
 }
 
 static void wave_brush_init_smoother3(struct wave_brush *b)
@@ -390,7 +413,7 @@ static void wave_brush_init_smoother3(struct wave_brush *b)
 		//if (i>0) b->f[i] -= 0.06;
 		b->a[i] = T[i];//1/pow(b->f[i],2.1);  // inverse square frequency decay
 	}
-	b->λ = 0.009;
+	b->λ = 0.005;
 }
 
 static void wave_quantized_stdout(struct wave_canvas *w)
@@ -400,7 +423,7 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 		M = fmax(M, fabs(w->x[i]));
 	int16_t *x = malloc(w->n * sizeof*x);
 	for (int i = 0; i < w->n; i++)
-		x[i] = 10000*(w->x[i]/M);
+		x[i] = 8000*(w->x[i]/M);
 	fwrite(x, sizeof*x, w->n, stdout);
 	free(x);
 }
@@ -418,7 +441,7 @@ static char *bwv_772_stimme1 =
 	"Aagf egfa g9              efg afge f9"
 	" gfe dfeg f9              def gefd e9"
 	" cde fdec defg afge      fgab c'abg c'2g2 e2dc"
-	"c_BAG FEG_B ABCE DcFB    c16"
+	"c_BAG FEG_B ABCE DcFB    [C16c16]"
 	;
 static char *bwv_772_stimme2 =
 	"zzzz zzzz zC,D,E, F,D,E,C,            G,2G,,2 zzzz zG,A,B, CA,B,G,"
