@@ -146,27 +146,9 @@ static int parse_note_name(
 	*t = p/q;
 
 	// debug
-	fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
+	//fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
 	return i;
 }
-
-static int test_parse_note_name(void)
-{
-	int o, n, d;
-	float t;
-	parse_note_name(&o, &n, &d, &t, "a");
-	parse_note_name(&o, &n, &d, &t, "A");
-	parse_note_name(&o, &n, &d, &t, "^A");
-	parse_note_name(&o, &n, &d, &t, "A,");
-	parse_note_name(&o, &n, &d, &t, "a'");
-	parse_note_name(&o, &n, &d, &t, "a'3");
-	parse_note_name(&o, &n, &d, &t, "a'3/2");
-	parse_note_name(&o, &n, &d, &t, "a'355/113");
-	parse_note_name(&o, &n, &d, &t, "a'/4");
-	parse_note_name(&o, &n, &d, &t, "z4");
-}
-
-
 
 static int chromatic_note(  // compute a chromatic note from major+accidentals
 	int n,              // input note in major scale
@@ -179,29 +161,6 @@ static int chromatic_note(  // compute a chromatic note from major+accidentals
 	return m[n] + d;
 }
 
-//static float equal_temperament_pitch_from_note_name(char *a)
-//{
-//	int o; // octave (0=octave that contains middle C)
-//	int n; // note within the octave (from 0=c to 6=b)
-//	int d; // accidental increment
-//	float t; // note length
-//	parse_note_name(&o, &n, &d, &t, a);
-//	int x = chromatic_note(n, d) + 12*o + 9;
-//	return d >= 0 ? 440 * pow(2, x/12) : 0;
-//}
-
-//static void get_pitch_and_duration(float *f, float *t, char *a)
-//{
-//	int o; // octave (0=octave that contains middle C)
-//	int n; // note within the octave (from 0=c to 6=b)
-//	int d; // accidental increment
-//	//float t; // note length
-//	parse_note_name(&o, &n, &d, t, a);
-//	float x = chromatic_note(n, d) + 12*o - 9;
-//	*f = d >= 0 ? 440 * pow(2, x/12) : 0;
-//	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
-//}
-
 // return a pointer to the remaning part of the string
 static char *parse_pitch_and_duration(float *f, float *t, char *a)
 {
@@ -213,39 +172,6 @@ static char *parse_pitch_and_duration(float *f, float *t, char *a)
 	*f = n >= 0 ? 440 * pow(2, x/12) : 0; // equal temperament
 	//fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
 	return a + i;
-}
-
-static int test_get_pitch_and_duration(void)
-{
-	float f, t;
-	parse_pitch_and_duration(&f, &t, "A,,");
-	parse_pitch_and_duration(&f, &t, "A,");
-	parse_pitch_and_duration(&f, &t, "A");
-	parse_pitch_and_duration(&f, &t, "a");
-	parse_pitch_and_duration(&f, &t, "a'");
-	parse_pitch_and_duration(&f, &t, "^A");
-	parse_pitch_and_duration(&f, &t, "a'3");
-	parse_pitch_and_duration(&f, &t, "a'3/2");
-	parse_pitch_and_duration(&f, &t, "a'355/113");
-	parse_pitch_and_duration(&f, &t, "a'/4");
-	parse_pitch_and_duration(&f, &t, "z4");
-	parse_pitch_and_duration(&f, &t, "C,,");
-	parse_pitch_and_duration(&f, &t, "C,");
-	parse_pitch_and_duration(&f, &t, "C");
-	parse_pitch_and_duration(&f, &t, "c");
-	parse_pitch_and_duration(&f, &t, "c'");
-}
-
-static void test_parser(void)
-{
-	char s[] = "zCDE FDEC G2c2B2C2";
-	char *t = s;
-	while (*t)
-	{
-		float f, l;
-		t = parse_pitch_and_duration(&f, &l, t);
-		fprintf(stderr, "f=%g l=%g\n", f, l);
-	}
 }
 
 static float add_abc_chunk_into_score(
@@ -404,7 +330,7 @@ static void wave_brush_init_smoother(struct wave_brush *b)
 
 static void wave_brush_init_smoother3(struct wave_brush *b)
 {
-	float T[] = {1, .5, .45, 0.25, 0.15, 0.1, 0.05};
+	float T[] = {1, .5, .35, 0.25, 0.15, 0.1, 0.05};
 	b->n = sizeof T / sizeof *T;
 	for (int i = 0; i < b->n; i++)
 	{
@@ -423,7 +349,7 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 		M = fmax(M, fabs(w->x[i]));
 	int16_t *x = malloc(w->n * sizeof*x);
 	for (int i = 0; i < w->n; i++)
-		x[i] = 8000*((w->x[i]/M);// + 0.00002*random_cauchy());
+		x[i] = 8000*((w->x[i]/M));// + 0.00002*random_cauchy());
 	fwrite(x, sizeof*x, w->n, stdout);
 	free(x);
 }
@@ -459,7 +385,7 @@ static char *bwv_772_stimme2 =
 	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         [C,,16C,16]"
 	;
 
-static void test_pipeline(void)
+static void test_score(void)
 {
 	//char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
 	char *a = bwv_772_stimme1;
@@ -484,26 +410,7 @@ static void test_pipeline(void)
 	wave_quantized_stdout(w);
 }
 
-
-//static void wave_bwc
-
-int main_no()
-{
-	//test_parse_note_name();
-	test_get_pitch_and_duration();
-	return 0;
-}
-int main_no2()
-{
-	test_parser();
-	return 0;
-}
-int main_no3()
-{
-	test_pipeline();
-	return 0;
-}
-int main_yes()
+static void test_waveplay(void)
 {
 	struct wave_canvas w[1];
 	wave_canvas_init(w, 7, 44000);
@@ -524,6 +431,12 @@ int main_yes()
 	wave_play(w, b, 4*440, 3, 4);
 
 	wave_quantized_stdout(w);
+}
+
+int main_yes()
+{
+	test_score();
 	return 0;
 }
-int main(){return main_no3();}
+
+int main(){return main_yes();}
