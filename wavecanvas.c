@@ -88,12 +88,13 @@ static int parse_note_name(
 		char *a        // input note string
 		)
 {
-	//fprintf(stderr, "parsing note string \"%s\"...", a);
+	fprintf(stderr, "parsing note string \"%s\"...", a);
 	*o = *n = *d = 0;
 	*t = 1;
 	int i = 0;
 
 	// prefix: accidentals
+	// note: this loop also eats leading spaces and extraneous characters
 	while (a[i] && !isalpha(a[i]))
 	{
 		if (a[i] == '^') *d += 1;
@@ -111,7 +112,8 @@ static int parse_note_name(
 	case 'a': *n = 5; break;
 	case 'b': *n = 6; break;
 	case 'z': *n = -1; break;
-	default: fprintf(stderr, "ERROR: unrecognized note %c\n", a[i]);
+	default: fprintf(stderr, "ERROR: unrecognized note '%c' (%d)\n",
+				 a[i], a[i]);
 	}
 	if (islower(a[i])) *o += 1;
 	i += 1;
@@ -146,7 +148,7 @@ static int parse_note_name(
 	*t = p/q;
 
 	// debug
-	//fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
+	fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
 	return i;
 }
 
@@ -182,20 +184,24 @@ static float add_abc_chunk_into_score(
 		) // return value = end of timespan
 {
 	b /= 60;
-	int c = 0; // chord state
+	int c = 0;   // chord state
+	float C = 0; // held voices state
 	while (*a)
 	{
 		float ω; // note pitch
 		float λ; // note length (in "abc" units)
 		if (isspace(*a)) { a += 1; continue; }   // eat spaces
 		if (*a == '[') { c = 1; a += 1; }        // begin chord
+		if (*a == '{') { C = t; a += 1; }        // begin holding voices
+		if (*a == ';') { t = C; a += 1; }        // next voice
 		a = parse_pitch_and_duration(&ω, &λ, a);
 		s->f[s->n] = ω;    // pitch
 		s->t[s->n] = t;    // attack time
 		s->l[s->n] = λ/b;  // duration
 		s->i[s->n] = 0;    // instrument
 		if (!c) t += λ/b;  // advance counter if outside chord
-		if (*a == ']') { c = 0; a += 1; }       // end chord
+		if (*a == ']') { c = 0; a += 1; }        // end chord
+		if (*a == '}') { C = 0; a += 1; }        // end hold
 		s->n += 1;
 	}
 	return t;
@@ -213,6 +219,15 @@ static float decay_planck(float λ, float t)
 	return (t*t*t/(exp(t/λ)-1));
 }
 
+static float decay_hermite(float λ, float t)
+{
+	return t*exp(-λ * t);
+}
+
+static float decay_sigma(float λ, float t)
+{
+	return tanh(300*t)*exp(-λ * t);
+}
 
 // this is the sole function that paints a brush stroke on the canvas
 static void wave_play(                  // "play" note f between T[0] and T[1]
@@ -240,15 +255,16 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		for (int k = 0; k < b->n; k++)
 		{
 			// random phase
-			float ξ = k*1.273+0.3*b->n - f * (1+Ta) / (1+k+Tb*Tb);
+			float ξ = 0;///3;//k*1.273+0.3*b->n - f * (1+Ta) / (1+k+Tb*Tb);
 
 			if (f * b->f[k] * 2 < w->F) // avoid aliasing
 				x += A * b->a[k] * sin(f * b->f[k] * 2*π*t + ξ);
 		}
 		//w->x[j] += exp(- b->λ * f * t) * x;
 		//w->x[j] += x * decay_exp(b->λ * f, t);
-		w->x[j] += x * decay_exp(b->λ*100, t);
+		//w->x[j] += x * decay_exp(b->λ*100, t);
 		//w->x[j] += x * decay_planck(b->λ, t);
+		w->x[j] += x * decay_sigma(b->λ*f, t);
 	}
 }
 
@@ -335,15 +351,29 @@ static void wave_brush_init_smoother3(struct wave_brush *b)
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = (i + 1);
-		//if (i>0) b->f[i] -= 0.06;
+		//if (i>0) b->f[i] += 0.05;
 		b->a[i] = T[i];//1/pow(b->f[i],2.1);  // inverse square frequency decay
 	}
 	b->λ = 0.005;
 }
 
+static void wave_triangular_filter(struct wave_canvas *w, int d)
+{
+	float *y = malloc(w->n * sizeof*y);
+	for (int i = 0; i < w->n - d; i++)
+	{
+		y[i] = w->x[i];
+		for (int j = 0; j < d; j++)
+			y[i] += (d - j)*w->x[i+j]/d;
+	}
+	free(w->x);
+	w->x = y;
+}
+
 //#include "random.c"
 static void wave_quantized_stdout(struct wave_canvas *w)
 {
+	wave_triangular_filter(w, 40);
 	float M = 0;
 	for (int i = 0; i < w->n; i++)
 		M = fmax(M, fabs(w->x[i]));
@@ -385,6 +415,56 @@ static char *bwv_772_stimme2 =
 	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         [C,,16C,16]"
 	;
 
+// prelude in C, unit = sixteenth note
+static char *bwv_846 =
+	// CEGce       CDAdf         B,DGdf       CEGce
+	// CEAea       CD^FAd        B,DGdg       B,CEGc
+	// A,CEGc      D,A,D^Fc      G,B,DGB      G,_B,EG^c
+	// F,A,DGd     F,_A,DFB      E,G,CGc      E,F,A,CF
+	// D,F,A,CF    G,,D,G,B,F    C,E,G,CE     C,G,_B,CE
+	// F,,F,A,CE   ^F,,C,A,C_E   _A,,F,B,CD   G,,F,G,B,D
+	// G,,E,G,CE   G,,D,G,CF     G,,D,G,B,F   G,,_E,A,C^F
+	// G,,E,G,CG   G,,D,G,CF     G,,D,G,B,F   C,,C,G,_B,E
+
+	// cat wavecanvas.c|sed -e '1,/bwv_846/ d'|head -n 8|cut -c5-|tr -s ' '|tr ' ' '\n'|sed 's/\([_^]*[[:alpha:]][,]*\)/\t\1/g'|awk '{print "{" $1 "8;z" $2 "7;zz" $3$4$5$3$4$5 "}"}'|awk '{print "\t\""$0, $0"\""}'
+	"{C8;zE7;zzGceGce} {C8;zE7;zzGceGce}"
+	"{C8;zD7;zzAdfAdf} {C8;zD7;zzAdfAdf}"
+	"{B,8;zD7;zzGdfGdf} {B,8;zD7;zzGdfGdf}"
+	"{C8;zE7;zzGceGce} {C8;zE7;zzGceGce}"
+	"{C8;zE7;zzAeaAea} {C8;zE7;zzAeaAea}"
+	"{C8;zD7;zz^FAd^FAd} {C8;zD7;zz^FAd^FAd}"
+	"{B,8;zD7;zzGdgGdg} {B,8;zD7;zzGdgGdg}"
+	"{B,8;zC7;zzEGcEGc} {B,8;zC7;zzEGcEGc}"
+	"{A,8;zC7;zzEGcEGc} {A,8;zC7;zzEGcEGc}"
+	"{D,8;zA,7;zzD^FcD^Fc} {D,8;zA,7;zzD^FcD^Fc}"
+	"{G,8;zB,7;zzDGBDGB} {G,8;zB,7;zzDGBDGB}"
+	"{G,8;z_B,7;zzEG^cEG^c} {G,8;z_B,7;zzEG^cEG^c}"
+	"{F,8;zA,7;zzDGdDGd} {F,8;zA,7;zzDGdDGd}"
+	"{F,8;z_A,7;zzDFBDFB} {F,8;z_A,7;zzDFBDFB}"
+	"{E,8;zG,7;zzCGcCGc} {E,8;zG,7;zzCGcCGc}"
+	"{E,8;zF,7;zzA,CFA,CF} {E,8;zF,7;zzA,CFA,CF}"
+	"{D,8;zF,7;zzA,CFA,CF} {D,8;zF,7;zzA,CFA,CF}"
+	"{G,,8;zD,7;zzG,B,FG,B,F} {G,,8;zD,7;zzG,B,FG,B,F}"
+	"{C,8;zE,7;zzG,CEG,CE} {C,8;zE,7;zzG,CEG,CE}"
+	"{C,8;zG,7;zz_B,CE_B,CE} {C,8;zG,7;zz_B,CE_B,CE}"
+	"{F,,8;zF,7;zzA,CEA,CE} {F,,8;zF,7;zzA,CEA,CE}"
+	"{^F,,8;zC,7;zzA,C_EA,C_E} {^F,,8;zC,7;zzA,C_EA,C_E}"
+	"{_A,,8;zF,7;zzB,CDB,CD} {_A,,8;zF,7;zzB,CDB,CD}"
+	"{G,,8;zF,7;zzG,B,DG,B,D} {G,,8;zF,7;zzG,B,DG,B,D}"
+	"{G,,8;zE,7;zzG,CEG,CE} {G,,8;zE,7;zzG,CEG,CE}"
+	"{G,,8;zD,7;zzG,CFG,CF} {G,,8;zD,7;zzG,CFG,CF}"
+	"{G,,8;zD,7;zzG,B,FG,B,F} {G,,8;zD,7;zzG,B,FG,B,F}"
+	"{G,,8;z_E,7;zzA,C^FA,C^F} {G,,8;z_E,7;zzA,C^FA,C^F}"
+	"{G,,8;zE,7;zzG,CGG,CG} {G,,8;zE,7;zzG,CGG,CG}"
+	"{G,,8;zD,7;zzG,CFG,CF} {G,,8;zD,7;zzG,CFG,CF}"
+	"{G,,8;zD,7;zzG,B,FG,B,F} {G,,8;zD,7;zzG,B,FG,B,F}"
+	"{C,,8;zC,7;zzG,_B,EG,_B,E} {C,,8;zC,7;zzG,_B,EG,_B,E}"
+
+	"{C,,8C,,8;zC,15;zzF,A,CFCA,CA,F,A,F,D,F,D,}"
+	"{C,,8C,,8;zB,,15;zzGBdfdBdBGBDFED}"
+	"[C,,16C,16E16G16c16]"
+;
+
 static void test_score(void)
 {
 	//char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
@@ -404,6 +484,27 @@ static void test_score(void)
 	struct wave_orchestra o[1];
 	o->n = 1;
 	wave_brush_init_smoother3(o->t + 0);
+
+	wave_play_score_using_orchestra(w, s, o);
+
+	wave_quantized_stdout(w);
+}
+
+static void test_chords(void)
+{
+	char *a = bwv_846;
+	struct wave_score s[1];
+	s->n = 0;
+	float t = add_abc_chunk_into_score(s, a, 90*4, 0);
+
+	struct wave_canvas w[1];
+	wave_canvas_init(w, t+4, 44000);
+	debug_score(s);
+
+	struct wave_orchestra o[1];
+	o->n = 1;
+	wave_brush_init_smoother3(o->t);
+	o->t->λ = 0.005;
 
 	wave_play_score_using_orchestra(w, s, o);
 
@@ -435,7 +536,9 @@ static void test_waveplay(void)
 
 int main_yes()
 {
-	test_score();
+	//test_waveplay();
+	//test_score();
+	test_chords();
 	return 0;
 }
 
