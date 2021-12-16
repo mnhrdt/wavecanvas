@@ -208,11 +208,10 @@ static char *parse_pitch_and_duration(float *f, float *t, char *a)
 	int o; // octave (0=octave that contains middle C)
 	int n; // note within the octave (from 0=c to 6=b)
 	int d; // accidental increment
-	//float t; // note length
 	int i = parse_note_name(&o, &n, &d, t, a);
 	float x = chromatic_note(n, d) + 12*o - 9;
-	*f = n >= 0 ? 440 * pow(2, x/12) : 0;
-	fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
+	*f = n >= 0 ? 440 * pow(2, x/12) : 0; // equal temperament
+	//fprintf(stderr, "gpd \"%s\" x=%g f=%g t=%g\n", a, x, *f, *t);
 	return a + i;
 }
 
@@ -301,7 +300,7 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 	int n[2] = { Ta * w->F, Tb * w->F }; // discrete time interval
 	//fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
 	//		f, Ta, Tb, b->n);
-	float φ = 55; // least note
+	float φ = 20; // least note
 	float A = (220-φ)/(f-φ); // volume equalizer
 	for (int i = 0; i < n[1] - n[0]; i++)
 	{
@@ -416,6 +415,7 @@ static void wave_brush_init_smoother3(struct wave_brush *b)
 	b->λ = 0.005;
 }
 
+//#include "random.c"
 static void wave_quantized_stdout(struct wave_canvas *w)
 {
 	float M = 0;
@@ -423,12 +423,13 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 		M = fmax(M, fabs(w->x[i]));
 	int16_t *x = malloc(w->n * sizeof*x);
 	for (int i = 0; i < w->n; i++)
-		x[i] = 8000*(w->x[i]/M);
+		x[i] = 8000*((w->x[i]/M);// + 0.00002*random_cauchy());
 	fwrite(x, sizeof*x, w->n, stdout);
 	free(x);
 }
 
-// inventio 1, unit=quarternote, no trills, separate voices (v1 & v2)
+// inventio 1, unit = sixteenth note, no trills, separate voices
+// pagination by Nels Drue's "urtext" from IMSLP 70230
 static char *bwv_772_stimme1 =
 	"zCDE FDEC G2c2B2c2       dGAB cABG d2g2f2g2"
 	"eagf egfa gfed cedf      edcB AcBd cBAG ^FAGB"
@@ -441,7 +442,7 @@ static char *bwv_772_stimme1 =
 	"Aagf egfa g9              efg afge f9"
 	" gfe dfeg f9              def gefd e9"
 	" cde fdec defg afge      fgab c'abg c'2g2 e2dc"
-	"c_BAG FEG_B ABCE DcFB    [C16c16]"
+	"c_BAG FEG_B ABCE DcFB    [E16G16c16]"
 	;
 static char *bwv_772_stimme2 =
 	"zzzz zzzz zC,D,E, F,D,E,C,            G,2G,,2 zzzz zG,A,B, CA,B,G,"
@@ -454,7 +455,8 @@ static char *bwv_772_stimme2 =
 	"B,2E,2 D3E CB,A,G, ^F,A,^G,B,         A,CB,D CEDF E2A,2E2E,2"
 	"A,2A,,2 zzzz zEDC B,D^CE              D9 A,B,C DB,CA,"
 	"B,9 DCB, A,CB,D                       C9 G,A,_B, CA,B,G,"
-//	"
+	"A,2_B,2A,2G,2 F,2D2C2_B,2             A,2F2E2D2 ED,E,F, G,E,F,D,"
+	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         [C,,16C,16]"
 	;
 
 static void test_pipeline(void)
