@@ -12,9 +12,9 @@
 // There is no notion of "time", the whole sound file is seen at once and the
 // note can be played at any time, not necessarily in order.
 //
-// to find better "painting" names
+// TODO: find better "painting" names
 // 	orchestra    <-> palette/brush set?
-// 	score        <-> drawing instructions?
+// 	score        <-> drawing instructions? recipe?
 //
 //   Play a score using an orchestra :: draw a painting using these brushes
 
@@ -28,6 +28,7 @@
 
 
 static const float π = M_PI;
+static const float SAMPLING_RATE_IN_HERTZ = 44100;
 
 
 struct wave_canvas {  // data structure to hold the whole canvas (sound file)
@@ -45,31 +46,26 @@ struct wave_brush {      // data structure to hold the timbre of an instrument
 	                 // should have a different decay rate, etc
 };
 
-struct wave_orchestra { // a set of instruments (brushes)
-	int n;          // number of instruments
-	struct wave_brush t[0x100];
-};
 
-#define MAX_NOTES 40000
+#define MAX_NOTES 40000 // should be enough for anybody
 struct wave_score {          // a set of notes (in no particular order)
 	int n;               // total number of notes
 	float f[MAX_NOTES];  // pitch (fundamental frequency)
 	float t[MAX_NOTES];  // start of attack (time)
 	float l[MAX_NOTES];  // length
-	int   i[MAX_NOTES];  // instrument (index on the orchestra)
 };
 
 static void debug_score(struct wave_score *s)
 {
 	fprintf(stderr, "score with %d notes\n", s->n);
 	for (int i = 0; i < s->n; i++)
-		fprintf(stderr, "\tf=%g t=%g l=%g i=%d\n",
-				s->f[i], s->t[i], s->l[i], s->i[i]);
+		fprintf(stderr,"\tf=%g t=%g l=%g\n", s->f[i], s->t[i], s->l[i]);
 }
 
 //struct wave_temperament { // gives the fundamental pitch of each note
 //
 //};
+
 
 // BASIC SCALE
 // C is middle C
@@ -79,6 +75,7 @@ static void debug_score(struct wave_score *s)
 // accidentals (to be notated explicitly at each note):
 // _B : B flat
 // ^F : F sharp
+// z  : rest
 
 static int parse_note_name(
 		int *o,        // output octave (0 is that of middle C)
@@ -88,7 +85,7 @@ static int parse_note_name(
 		char *a        // input note string
 		)
 {
-	fprintf(stderr, "parsing note string \"%s\"...", a);
+	//fprintf(stderr, "parsing note string \"%s\"...", a);
 	*o = *n = *d = 0;
 	*t = 1;
 	int i = 0;
@@ -148,7 +145,7 @@ static int parse_note_name(
 	*t = p/q;
 
 	// debug
-	fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
+	//fprintf(stderr, "\tn=%d o=%d d=%d t=%g\n", *n, *o, *d, *t);
 	return i;
 }
 
@@ -198,7 +195,6 @@ static float add_abc_chunk_into_score(
 		s->f[s->n] = ω;    // pitch
 		s->t[s->n] = t;    // attack time
 		s->l[s->n] = λ/b;  // duration
-		s->i[s->n] = 0;    // instrument
 		if (!c) t += λ/b;  // advance counter if outside chord
 		if (*a == ']') { c = 0; a += 1; }        // end chord
 		if (*a == '}') { C = 0; a += 1; }        // end hold
@@ -226,7 +222,7 @@ static float decay_hermite(float λ, float t)
 
 static float decay_sigma(float λ, float t)
 {
-	return tanh(300*t)*exp(-λ * t);
+	return tanh(200*t)*exp(-λ * t);
 }
 
 // this is the sole function that paints a brush stroke on the canvas
@@ -268,18 +264,18 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 	}
 }
 
-static void wave_play_score_using_orchestra(
+static void wave_play_score_using_single_instrument(
 		struct wave_canvas *c,    // canvas to fill
 		struct wave_score *s,     // list of notes to play
-		struct wave_orchestra *o  // instruments to play the notes with
+		struct wave_brush *b      // instruments to play the notes with
 		)
 {
 	for (int i = 0; i < s->n; i++)
 	{
-		struct wave_brush *b = o->t + s->i[i];
 		float f = s->f[i];
 		float t = s->t[i];
 		float T = s->l[i] + t;
+		f = 1.00*(f - 261.63) + 261.63;
 		wave_play(c, b, f, t, T);
 	}
 }
@@ -310,7 +306,7 @@ static void wave_brush_init_pure(struct wave_brush *b)
 // full harmonic spectrum
 static void wave_brush_init_full(struct wave_brush *b)
 {
-	b->n = 0x100;
+	b->n = 10;
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = i + 1; // harmonic spectrum
@@ -322,7 +318,7 @@ static void wave_brush_init_full(struct wave_brush *b)
 // triangular, soft-sounding wave
 static void wave_brush_init_triangular(struct wave_brush *b)
 {
-	b->n = 0x100;
+	b->n = 10;
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = i + 1;      // harmonic spectrum
@@ -351,7 +347,7 @@ static void wave_brush_init_smoother3(struct wave_brush *b)
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = (i + 1);
-		//if (i>0) b->f[i] += 0.05;
+		//if (i>0) b->f[i] -= 0.04;
 		b->a[i] = T[i];//1/pow(b->f[i],2.1);  // inverse square frequency decay
 	}
 	b->λ = 0.005;
@@ -467,46 +463,43 @@ static char *bwv_846 =
 
 static void test_score(void)
 {
-	//char a[] = "zCDE FDEC G2c2B2c2";  // the ABC string
-	char *a = bwv_772_stimme1;
-	char *b = bwv_772_stimme2;
+	char *x = bwv_772_stimme1;
+	char *y = bwv_772_stimme2;
 	struct wave_score s[1];           // the wave score
 	s->n = 0;
-	float ta = add_abc_chunk_into_score(s, a, 80*4, 0);
-	float tb = add_abc_chunk_into_score(s, b, 80*4, 0);
-	fprintf(stderr, "ta=%g tb=%g\n", ta, tb);
+	float tx = add_abc_chunk_into_score(s, x, 80*4, 0);
+	float ty = add_abc_chunk_into_score(s, y, 80*4, 0);
+	fprintf(stderr, "tx=%g ty=%g\n", tx, ty);
 	//debug_score(s);
 
 	struct wave_canvas w[1];
-	wave_canvas_init(w, 66, 44000);
+	wave_canvas_init(w, 66, SAMPLING_RATE_IN_HERTZ);
 
-	// setup an "orchestra" with one instrument
-	struct wave_orchestra o[1];
-	o->n = 1;
-	wave_brush_init_smoother3(o->t + 0);
+	struct wave_brush b[1];
+	wave_brush_init_smoother3(b);
+	b->λ = 0.005; // decay rate
 
-	wave_play_score_using_orchestra(w, s, o);
+	wave_play_score_using_single_instrument(w, s, b);
 
 	wave_quantized_stdout(w);
 }
 
 static void test_chords(void)
 {
-	char *a = bwv_846;
+	char *x = bwv_846;
 	struct wave_score s[1];
 	s->n = 0;
-	float t = add_abc_chunk_into_score(s, a, 90*4, 0);
+	float t = add_abc_chunk_into_score(s, x, 90*4, 0);
 
 	struct wave_canvas w[1];
-	wave_canvas_init(w, t+4, 44000);
-	debug_score(s);
+	wave_canvas_init(w, t+4, SAMPLING_RATE_IN_HERTZ);
+	//debug_score(s);
 
-	struct wave_orchestra o[1];
-	o->n = 1;
-	wave_brush_init_smoother3(o->t);
-	o->t->λ = 0.005;
+	struct wave_brush b[1];
+	wave_brush_init_smoother3(b);
+	b->λ = 0.005; // decay rate
 
-	wave_play_score_using_orchestra(w, s, o);
+	wave_play_score_using_single_instrument(w, s, b);
 
 	wave_quantized_stdout(w);
 }
@@ -514,7 +507,7 @@ static void test_chords(void)
 static void test_waveplay(void)
 {
 	struct wave_canvas w[1];
-	wave_canvas_init(w, 7, 44000);
+	wave_canvas_init(w, 7, SAMPLING_RATE_IN_HERTZ);
 
 	struct wave_brush b[1];
 	wave_brush_init_smoother(b);
@@ -536,8 +529,7 @@ static void test_waveplay(void)
 
 int main_yes()
 {
-	//test_waveplay();
-	//test_score();
+	test_score();
 	test_chords();
 	return 0;
 }
