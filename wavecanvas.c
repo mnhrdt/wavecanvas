@@ -228,6 +228,12 @@ static float decay_hermite(float λ, float t)
 
 static float decay_sigma(float λ, float t)
 {
+	return atan(300*t)*
+		exp(-λ * t);
+}
+
+static float decay_sigma_vibrato(float λ, float t)
+{
 	return atan(300*t)*(4+sin(50*t))*
 		exp(-λ * t);
 }
@@ -267,7 +273,8 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		//w->x[j] += x * decay_exp(b->λ * f, t);
 		//w->x[j] += x * decay_exp(b->λ*100, t);
 		//w->x[j] += x * decay_planck(b->λ, t);
-		w->x[j] += x * decay_sigma(b->λ*100, t);
+		//w->x[j] += x * decay_sigma(b->λ*100, t);
+		w->x[j] += x * decay_sigma_vibrato(b->λ*100, t);
 	}
 }
 
@@ -282,7 +289,7 @@ static void wave_play_score_using_single_instrument(
 		float f = s->f[i];
 		float t = s->t[i];
 		float T = s->l[i] + t;
-		f = 0.9*(f - 400) + 400;
+		f = 1*(f - 400) + 400;
 		wave_play(c, b, f, t, T);
 	}
 }
@@ -368,7 +375,7 @@ static void wave_brush_init_generic(struct wave_brush *b)
 
 	// amplitudes of each partial (should decay from 1 to 0)
 	float a[] = {1, 0.6, 0.3, 0.2, 0.1, 0.05, 0.025, 0.01};
-	//float a[] = {2, 1, 1, 1, 1, 1, 1, 1};
+	//float a[] = {2, 0, 1, 0, 1, 0, 1, 1};
 
 	b->n = sizeof a / sizeof *a;
 	for (int i = 0; i < b->n; i++)
@@ -422,7 +429,7 @@ static char *bwv_772_stimme1 =
 	"Aagf egfa g9              efg afge f9"
 	" gfe dfeg f9              def gefd e9"
 	" cde fdec defg afge      fgab c'abg c'2g2 e2dc"
-	"c_BAG FEG_B ABCE DcFB    [E16G16c16]"
+	"c_BAG FEG_B ABCE DcFB    {E16;G16;c16}"
 	;
 static char *bwv_772_stimme2 =
 	"zzzz zzzz zC,D,E, F,D,E,C,            G,2G,,2 zzzz zG,A,B, CA,B,G,"
@@ -436,7 +443,7 @@ static char *bwv_772_stimme2 =
 	"A,2A,,2 zzzz zEDC B,D^CE              D9 A,B,C DB,CA,"
 	"B,9 DCB, A,CB,D                       C9 G,A,_B, CA,B,G,"
 	"A,2_B,2A,2G,2 F,2D2C2_B,2             A,2F2E2D2 ED,E,F, G,E,F,D,"
-	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         [C,,16C,16]"
+	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         {C,,16;C,16}"
 	;
 
 // prelude in C, unit = sixteenth note
@@ -526,8 +533,8 @@ static char *bwv_779_stimme2 =
 
 static void test_score(void)
 {
-	char *x = bwv_779_stimme1;
-	char *y = bwv_779_stimme2;
+	char *x = bwv_772_stimme1;
+	char *y = bwv_772_stimme2;
 	struct wave_score s[1];           // the wave score
 	s->n = 0;
 	float tx = add_abc_chunk_into_score(s, x, 80*4, 0);
