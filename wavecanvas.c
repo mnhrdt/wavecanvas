@@ -17,6 +17,12 @@
 // 	score        <-> drawing instructions? recipe?
 //
 //   Play a score using an orchestra :: draw a painting using these brushes
+//
+// Why?  This is an implementation of the ideas described in the book
+// "Tuning, Timbre, Spectrum, Scale" by William Sethares (Springer 2004).  More
+// precisely, the ideas for consonant spectral deformation described on chapter
+// 13 of that book.  You can make any dissonant music sound consonant by using
+// the appropriate synthetic instruments!
 
 
 #include <assert.h>
@@ -222,7 +228,8 @@ static float decay_hermite(float λ, float t)
 
 static float decay_sigma(float λ, float t)
 {
-	return tanh(200*t)*exp(-λ * t);
+	return atan(300*t)*(4+sin(50*t))*
+		exp(-λ * t);
 }
 
 // this is the sole function that paints a brush stroke on the canvas
@@ -260,7 +267,7 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		//w->x[j] += x * decay_exp(b->λ * f, t);
 		//w->x[j] += x * decay_exp(b->λ*100, t);
 		//w->x[j] += x * decay_planck(b->λ, t);
-		w->x[j] += x * decay_sigma(b->λ*f, t);
+		w->x[j] += x * decay_sigma(b->λ*100, t);
 	}
 }
 
@@ -275,7 +282,7 @@ static void wave_play_score_using_single_instrument(
 		float f = s->f[i];
 		float t = s->t[i];
 		float T = s->l[i] + t;
-		f = 1.00*(f - 261.63) + 261.63;
+		f = 0.9*(f - 400) + 400;
 		wave_play(c, b, f, t, T);
 	}
 }
@@ -360,12 +367,14 @@ static void wave_brush_init_generic(struct wave_brush *b)
 	float f[] = {1, 2, 3, 4, 5, 6, 7, 8};
 
 	// amplitudes of each partial (should decay from 1 to 0)
-	float a[] = {1, 0.5, 0.3, 0.2, 0.1, 0.05, 0.025, 0.01};
+	float a[] = {1, 0.6, 0.3, 0.2, 0.1, 0.05, 0.025, 0.01};
+	//float a[] = {2, 1, 1, 1, 1, 1, 1, 1};
 
-	b->n = sizeof f / sizeof *f;
+	b->n = sizeof a / sizeof *a;
 	for (int i = 0; i < b->n; i++)
 	{
-		b->f[i] = f[i];// - i*0.07;
+		b->f[i] = f[i];
+		//if (i > 0) b->f[i] += 0.05;
 		b->a[i] = a[i];
 	}
 
@@ -388,7 +397,7 @@ static void wave_triangular_filter(struct wave_canvas *w, int d)
 //#include "random.c"
 static void wave_quantized_stdout(struct wave_canvas *w)
 {
-	wave_triangular_filter(w, 90);
+	wave_triangular_filter(w, 40);
 	float M = 0;
 	for (int i = 0; i < w->n; i++)
 		M = fmax(M, fabs(w->x[i]));
@@ -531,7 +540,7 @@ static void test_score(void)
 
 	struct wave_brush b[1];
 	wave_brush_init_generic(b);
-	//wave_brush_init_pure(b);
+	//wave_brush_init_full(b);
 	b->λ = 0.01;
 
 	wave_play_score_using_single_instrument(w, s, b);
@@ -552,8 +561,8 @@ static void test_chords(void)
 
 	struct wave_brush b[1];
 	wave_brush_init_generic(b);
-	//wave_brush_init_pure(b);
-	b->λ = 0.003;
+	//wave_brush_init_full(b);
+	b->λ = 0.01;
 
 	wave_play_score_using_single_instrument(w, s, b);
 
