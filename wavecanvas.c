@@ -250,7 +250,7 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 	int n[2] = { Ta * w->F, Tb * w->F }; // discrete time interval
 	//fprintf(stderr, "note %g from %g to %g (%d harmonics)\n",
 	//		f, Ta, Tb, b->n);
-	float φ = 20; // least note
+	float φ = 10; // least note
 	float A = (220-φ)/(f-φ); // volume equalizer
 	for (int i = 0; i < n[1] - n[0]; i++)
 	{
@@ -271,10 +271,10 @@ static void wave_play(                  // "play" note f between T[0] and T[1]
 		}
 		//w->x[j] += exp(- b->λ * f * t) * x;
 		//w->x[j] += x * decay_exp(b->λ * f, t);
-		//w->x[j] += x * decay_exp(b->λ*100, t);
-		//w->x[j] += x * decay_planck(b->λ, t);
-		//w->x[j] += x * decay_sigma(b->λ*100, t);
-		w->x[j] += x * decay_sigma_vibrato(b->λ*100, t);
+		w->x[j] += x * decay_exp(b->λ*100, t);
+		//w->x[j] += x * decay_planck(b->λ*0.2, t);
+		//w->x[j] += x * decay_sigma(b->λ*1, t);
+		//w->x[j] += x * decay_sigma_vibrato(b->λ*100, t);
 	}
 }
 
@@ -381,7 +381,8 @@ static void wave_brush_init_generic(struct wave_brush *b)
 	for (int i = 0; i < b->n; i++)
 	{
 		b->f[i] = f[i];
-		//if (i > 0) b->f[i] += 0.05;
+		//if (i > 0) b->f[i] += 0.09;
+		//b->a[i] = 1.0/(i+1);//a[i];
 		b->a[i] = a[i];
 	}
 
@@ -415,6 +416,7 @@ static void wave_quantized_stdout(struct wave_canvas *w)
 	free(x);
 }
 
+
 // inventio 1, unit = sixteenth note, no trills, separate voices
 // pagination by Nels Drue's "urtext" from IMSLP 70230
 static char *bwv_772_stimme1 =
@@ -445,6 +447,43 @@ static char *bwv_772_stimme2 =
 	"A,2_B,2A,2G,2 F,2D2C2_B,2             A,2F2E2D2 ED,E,F, G,E,F,D,"
 	"E,2C,2D,2E,2 F,D,E,F, G,2G,,2         {C,,16;C,16}"
 	;
+
+
+// inventio 8, unit = sixteenth note, separate voices
+// pagination by Nels Drue's "urtext" from IMSLP 70230
+static char *bwv_779_stimme1 =
+	"z2F2A2F2c2F2              f2ed cdc_B A_BAG    F2A2c2A2f2c2"
+	"ac'_bc' ac'_bc' ac'_bc'   faga faga faga      dfef dfef dfef"
+	"B2G2d2B2f2d2              gagf efed cdc_B     A2dc _Bc_BA GAGF"
+	"EFED C2cB c2E2            F2c2E2c2D2B2        c4 z8"
+	"z2c2e2c2g2c2              c'2ba gagf efed     c_Bca ca_Ba ca_Ba"
+
+	"_B2G2_B2G2d2G2  g2f_e d_edc _Bc_BA  G2_B2d2_B2g2d2"
+	"_b2^c2_b2^c2_b2^c2  d2A2f2d2a2f2  gfg_b c_bd_b e_bc_b"
+	"fefa Ba^ca daBa  edeg AgBg ^cgAg  f2d2_B2d2G2f2"
+	"e2c2A2c2F2_e2  df_ef df_ef df_ef  _Bdcd _Bdcd _Bdcd"
+	"G_BA_B G_BA_B G_BA_B  E2C2G2E2_B2G2  cdc_B A_BAG FGF_E"
+	"D2GF EFED CDC_B,  A,_B,A,G, F,2FE F2A,2  _B,2F2 A,2F2 G,2E2"
+		"{A,4;C4;F4}"
+	;
+static char *bwv_779_stimme2 =
+	"z12                       z2F,2A,2F,2C2F,2    F2ED CDC_B, A,_B,A,G,"
+	"F,2A,2C2A,2F2C2           Ac_Bc Ac_Bc Ac_Bc   FAGA FAGA FAGA"
+	"DFEF DFEF DFEF            B,2G,2C2G,2E2C2     FGFE DEDC B,CB,A,"
+	"G,2CB, A,B,A,G, F,G,F,E,  D,E,D,C, G,F,E,F, G,2G,,2  z2C,2E,2C,2G,2C,2"
+	"C2_B,A, G,A,G,F, E,F,E,D,  C,2E,2G,2E,2C2G,2  _E2^F,2_E2^F,2_E2^F,2"
+
+	"G,2F,_E,D,E,D,C,_B,,C,_B,,A,, G,,2G,2_B,2G,2D2G,2 G2F_ED_EDC_B,C_B,A,"
+	"G,F,G,E G,EF,E G,EE,E  F,E,F,D F,DE,D F,DD,D  _B,2G,2E,2G,2C,2E,2"
+	"A,2F,2D,2F,2B,,2D,2 G,2E,2^D,2E,2A,,2D,2 D,,D,C,D, G,D,A,D, _B,D,G,D,"
+	"C,,C,_B,,C, F,,C,G,,C, A,,C,F,,C, _B,,2D,2F,2D,2_B,2F,2"
+		"DF_EF DF_EF DF_EF"
+	"_B,DCD _B,DCD _B,DCD G,_B,A,_B, G,_B,A,_B, G,_B,A,_B,"
+		"E,2C,2F,2C,2A,2F,2"
+	"_B,C_B,A, G,A,G,F, E,F,E,D,  C,2F,E, D,E,D,C, _B,,C,_B,,A,,"
+		"G,,A,,G,,F,, C,_B,,A,,_B,, C,2C,,2 F,,4"
+	;
+
 
 // prelude in C, unit = sixteenth note
 static char *bwv_846 =
@@ -495,41 +534,6 @@ static char *bwv_846 =
 	"{C,,8C,,8;zB,,15;zzGBdfdBdBGBDFED}"
 	"[C,,16C,16E16G16c16]"
 ;
-
-// inventio 8, unit = sixteenth note, separate voices
-// pagination by Nels Drue's "urtext" from IMSLP 70230
-static char *bwv_779_stimme1 =
-	"z2F2A2F2c2F2              f2ed cdc_B A_BAG    F2A2c2A2f2c2"
-	"ac'_bc' ac'_bc' ac'_bc'   faga faga faga      dfef dfef dfef"
-	"B2G2d2B2f2d2              gagf efed cdc_B     A2dc _Bc_BA GAGF"
-	"EFED C2cB c2E2            F2c2E2c2D2B2        c4 z8"
-	"z2c2e2c2g2c2              c'2ba gagf efed     c_Bca ca_Ba ca_Ba"
-
-	"_B2G2_B2G2d2G2  g2f_e d_edc _Bc_BA  G2_B2d2_B2g2d2"
-	"_b2^c2_b2^c2_b2^c2  d2A2f2d2a2f2  gfg_b c_bd_b e_bc_b"
-	"fefa Ba^ca daBa  edeg AgBg ^cgAg  f2d2_B2d2G2f2"
-	"e2c2A2c2F2_e2  df_ef df_ef df_ef  _Bdcd _Bdcd _Bdcd"
-	"G_BA_B G_BA_B G_BA_B  E2C2G2E2_B2G2  cdc_B A_BAG FGF_E"
-	"D2GF EFED CDC_B,  A,_B,A,G, F,2FE F2A,2  _B,2F2 A,2F2 G,2E2"
-		"{A,4;C4;F4}"
-	;
-static char *bwv_779_stimme2 =
-	"z12                       z2F,2A,2F,2C2F,2    F2ED CDC_B, A,_B,A,G,"
-	"F,2A,2C2A,2F2C2           Ac_Bc Ac_Bc Ac_Bc   FAGA FAGA FAGA"
-	"DFEF DFEF DFEF            B,2G,2C2G,2E2C2     FGFE DEDC B,CB,A,"
-	"G,2CB, A,B,A,G, F,G,F,E,  D,E,D,C, G,F,E,F, G,2G,,2  z2C,2E,2C,2G,2C,2"
-	"C2_B,A, G,A,G,F, E,F,E,D,  C,2E,2G,2E,2C2G,2  _E2^F,2_E2^F,2_E2^F,2"
-
-	"G,2F,_E,D,E,D,C,_B,,C,_B,,A,, G,,2G,2_B,2G,2D2G,2 G2F_ED_EDC_B,C_B,A,"
-	"G,F,G,E G,EF,E G,EE,E  F,E,F,D F,DE,D F,DD,D  _B,2G,2E,2G,2C,2E,2"
-	"A,2F,2D,2F,2B,,2D,2 G,2E,2^D,2E,2A,,2D,2 D,,D,C,D, G,D,A,D, _B,D,G,D,"
-	"C,,C,_B,,C, F,,C,G,,C, A,,C,F,,C, _B,,2D,2F,2D,2_B,2F,2"
-		"DF_EF DF_EF DF_EF"
-	"_B,DCD _B,DCD _B,DCD G,_B,A,_B, G,_B,A,_B, G,_B,A,_B,"
-		"E,2C,2F,2C,2A,2F,2"
-	"_B,C_B,A, G,A,G,F, E,F,E,D,  C,2F,E, D,E,D,C, _B,,C,_B,,A,,"
-		"G,,A,,G,,F,, C,_B,,A,,_B,, C,2C,,2 F,,4"
-	;
 
 static void test_score(void)
 {
